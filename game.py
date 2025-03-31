@@ -193,17 +193,29 @@ def recursive_tango(position, tango_board, solutions, start = 0, check_counts = 
 
 if __name__ == '__main__':
     import gc
-    n = 4
-    for n in range(20):
+    n = 9
+    max_iter = 20
+    sols_array = np.empty(max_iter)
+    for i in range(max_iter):
         board = TangoBoard(n_random=n)
         print(f"{n} random fixed cells, {board.fixed_cells}")
         # board.print()
         tango_board, sols, check_counts = recursive_tango(position=36,
                                                         tango_board=board,
                                                         solutions=list())
-        print('Solutions:', len(sols))
+        n_sols = len(sols)
+        print('Solutions:', n_sols)
         print('Possible solutions checked:', check_counts)
-        if len(sols) <= 5:
-            for sol in sols:
-                sol.print()
+        # if n_sols <= 5:
+        #     for sol in sols:
+        #         sol.print()
+        sols_array[i] = n_sols
         print('*****************')
+    
+    avg_sols = sols_array.mean()
+    min_sols = sols_array.min()
+    max_sols = sols_array.max()
+
+    print("Minimum number of solutions:", min_sols)
+    print("Maximum number of solutions:", max_sols)
+    print("Average number of solutions:", avg_sols)
