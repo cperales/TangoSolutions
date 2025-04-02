@@ -1,2 +1,9 @@
+# Folders
 env*/
+__pycache__/
+
+# Files
 alternate_game.py
+*.pickle
+*.png
+*.prof
