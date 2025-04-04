@@ -261,9 +261,9 @@ class TangoBoard:
             prev_cell = cell
         return condition
 
-    def fulfill(self, board=None, eq_rules=None, opp_rules=None):
-        if board.any():
-            self.board = board
+    def fulfill(self, board=None, eq_rules=list(), opp_rules=list()):
+        if not board is None:
+            self.board = np.array(board, dtype=np.uint8)
             for row in range(6):
                 for col in range(6):
                     if self.board[row, col] != -1:
@@ -277,7 +277,7 @@ class TangoBoard:
                 self.set_cell(cell[0], cell[1], int(value))
                 self.fixed_cells.append(cell)
             print()
-        if eq_rules:
+        if not board is None:
             self.equal_rules = eq_rules
         else:
             n_eq_rules = input("Number of equal rules: ")
@@ -289,7 +289,7 @@ class TangoBoard:
                 self.equal_rules.append([cell_1, cell_2])
                 print('Rule saved!\n')
 
-        if opp_rules:
+        if not board is None:
             self.opp_rules = opp_rules
         else:
             n_opp_rules = input("Number of opposite rules: ")
