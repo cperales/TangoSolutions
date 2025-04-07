@@ -75,13 +75,13 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     history = {'train_loss': [], 'val_loss': [], 'val_accuracy': []}
 
     # Weights for different components of the loss
-    alpha = 0.7      # Weight for standard BCE loss
-    beta = 0.1       # Weight for row constraint loss
-    gamma = 0.1      # Weight for column constraint loss
-    eta = 0.1        # Weight for consecutive constraint loss
+    alpha = 0.25      # Weight for standard BCE loss
+    beta = 0.25       # Weight for row constraint loss
+    gamma = 0.25      # Weight for column constraint loss
+    eta = 0.25        # Weight for consecutive constraint loss
 
     best_val_loss = torch.inf
-    board_criterion = BoardLoss()
+    board_criterion = BoardLoss(device=device)
     
     for epoch in range(num_epochs):
         # Training phase
@@ -169,7 +169,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         
         print(f'Epoch {epoch+1}/{num_epochs} - Train Loss: {epoch_loss:.4f} - '
               f'Val Loss: {val_epoch_loss:.4f} - Val Accuracy: {val_accuracy:.4f}')
-    
+
     return history, best_model
 
 
@@ -196,10 +196,10 @@ def test_model(model, test_loader, device='cuda'):
             batch_size = targets.size(0)
             for i in range(batch_size):
                 tango_board_target = TangoBoard()
-                tango_board_target.fulfill(board=targets[i])
+                tango_board_target.fulfill(board=targets[i].cpu())
                 if tango_board_target.check():
                     tango_board_predicted = TangoBoard()
-                    tango_board_predicted.fulfill(board=predicted[i])
+                    tango_board_predicted.fulfill(board=predicted[i].cpu())
                     if tango_board_predicted.check():
                         correct_boards += 1
                 else:
@@ -276,7 +276,7 @@ def visualize_predictions(model, test_loader,  num_examples=5, device='cuda'):
     plt.show()
 
 
-def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50):
+def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resume=False):
     sol_filenames = [os.path.join(folder, f) for f in os.listdir(folder)]
     
     print(f"Loaded {len(sol_filenames)} Tango board solutions")
@@ -312,12 +312,13 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50):
         model = EnsembleCNN(n=5)
     else:
         model = TangoTransformer()
-    model_name = 'tango_' + model_type + '_model.pth'
+    model_name = 'models/tango_' + model_type + '_model.pth'
     
-    if os.path.isfile('models/' + model_name):
-        model.load_state_dict(torch.load('models/' + model_name))
+    if resume and os.path.isfile(model_name):
+        print('Loading from', model_name)
+        model.load_state_dict(torch.load(model_name))
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=10**-4)
+    optimizer = optim.Adam(model.parameters(), lr=10**-3)
     
     # Train model
     history, best_model = train_model(
@@ -358,7 +359,7 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50):
     
     # Save model
     os.makedirs('models', exist_ok=True)
-    torch.save(best_model.state_dict(), 'models/' + model_name)
+    torch.save(best_model.state_dict(), model_name)
     print("Model saved to models/tango_cnn_model.pth")
 
 
@@ -398,8 +399,9 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
         # # Visualize predictions
         if board_accuracy >= 0.5:
             visualize_predictions(model, test_loader, num_examples=5, device=device)
+            break
 
 
 if __name__ == "__main__":
-    main(model_type='transformer', random_cells=12, epochs=10)
-    main_test(model_type='transformer', random_cells=12)
+    main(model_type='cnn', random_cells=12, epochs=10, resume=True)
+    main_test(model_type='cnn', random_cells=12)

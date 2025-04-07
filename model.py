@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+from torch.nn import functional as F
 
 
 class PositionalEncoding(nn.Module):
@@ -128,13 +129,15 @@ class EnsembleCNN(nn.Module):
     def __init__(self, n):
         super().__init__()  # Call the parent class constructor
         self.ensemble = nn.ModuleList([TangoCNN() for _ in range(n)])
-        self.alpha = torch.ones(n) / n
+        self.alpha = nn.Parameter(torch.ones(n) / n)
+        # self.alpha = torch.ones(n) / n
     
     def forward(self, x):
+        norm_alpha = F.softmax(self.alpha, dim=0)
         batch_size = x.shape[0]
-        out = torch.zeros((batch_size, 6, 6))
+        out = torch.zeros((batch_size, 6, 6), device=x.device)
         for i, base_learner in enumerate(self.ensemble):
-            out += self.alpha[i] * base_learner(x)
+            out += norm_alpha[i] * base_learner(x)
         return out
 
 
