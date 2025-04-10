@@ -126,7 +126,7 @@ class TangoTransformer(nn.Module):
 
 
 class EnsembleCNN(nn.Module):
-    def __init__(self, n):
+    def __init__(self, n=5):
         super().__init__()  # Call the parent class constructor
         self.ensemble = nn.ModuleList([TangoCNN() for _ in range(n)])
         self.alpha = nn.Parameter(torch.ones(n) / n)
@@ -136,8 +136,10 @@ class EnsembleCNN(nn.Module):
         norm_alpha = F.softmax(self.alpha, dim=0)
         batch_size = x.shape[0]
         out = torch.zeros((batch_size, 6, 6), device=x.device)
-        for i, base_learner in enumerate(self.ensemble):
-            out += norm_alpha[i] * base_learner(x)
+        i = norm_alpha.argmax()
+        out = self.ensemble[i](x)
+        # for i, base_learner in enumerate(self.ensemble):
+        #     out += self.alpha[i] * base_learner(x)
         return out
 
 

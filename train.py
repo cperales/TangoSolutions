@@ -10,6 +10,17 @@ from game import load_solution, TangoBoard
 from model import TangoCNN, TangoTransformer, EnsembleCNN
 from copy import deepcopy
 from loss import BoardLoss
+from transformer_chatgpt import VisionTransformer as ChatGPTTransformer
+from transformer_claude import ImageTransformer as ClaudeTransformer
+from transformer_deepseek import ImageTransformer as DeepseekTransformer
+
+
+model_dict = {'cnn': TangoCNN,
+              'transformer': TangoTransformer,
+              'ensemble': EnsembleCNN,
+              'chatgpt': ChatGPTTransformer,
+              'claude': ClaudeTransformer,
+              'deepseek': DeepseekTransformer}
 
 
 class TangoDataset(Dataset):
@@ -75,101 +86,98 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     history = {'train_loss': [], 'val_loss': [], 'val_accuracy': []}
 
     # Weights for different components of the loss
-    alpha = 0.25      # Weight for standard BCE loss
-    beta = 0.25       # Weight for row constraint loss
-    gamma = 0.25      # Weight for column constraint loss
-    eta = 0.25        # Weight for consecutive constraint loss
-
+    alpha = 0.1      # Weight for standard BCE loss
+    beta = 0.9       # Weight for board constraint loss
     best_val_loss = torch.inf
     board_criterion = BoardLoss(device=device)
     
-    for epoch in range(num_epochs):
-        # Training phase
-        model.train()
-        running_loss = 0.0
-        
-        for inputs, targets in train_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
+    try:
+        for epoch in range(num_epochs):
+            # Training phase
+            model.train()
+            running_loss = 0.0
             
-            # Zero the parameter gradients
-            optimizer.zero_grad()
-            
-            # Forward pass
-            outputs = model(inputs)
-
-            # Standard BCE loss
-            bce_loss = criterion(outputs, targets)
-            
-            # Row constraint loss - each row should have exactly 3 suns
-            row_sum = outputs.sum(dim=2)  # Sum across each row
-            row_constraint_loss = ((row_sum - 3) ** 2).mean()  # Should be 3 suns per row
-            
-            # Column constraint loss - each column should have exactly 3 suns
-            col_sum = outputs.sum(dim=1)  # Sum across each column
-            col_constraint_loss = ((col_sum - 3) ** 2).mean()  # Should be 3 suns per column
-
-            # Board loss - no consecutive 3 suns or moons
-            board_constraint_loss = board_criterion(outputs)
-            
-            # Combined loss
-            loss = alpha * bce_loss + beta * row_constraint_loss + gamma * col_constraint_loss + eta * board_constraint_loss
-            
-            # Backward pass and optimize
-            loss.backward()
-            optimizer.step()
-            
-            running_loss += loss.item() * inputs.size(0)
-        
-        epoch_loss = running_loss / len(train_loader.dataset)
-        history['train_loss'].append(epoch_loss)
-        
-        # Validation phase
-        model.eval()
-        val_loss = 0.0
-        correct_cells = 0
-        total_cells = 0
-        
-        with torch.no_grad():
-            for inputs, targets in val_loader:
+            for inputs, targets in train_loader:
                 inputs, targets = inputs.to(device), targets.to(device)
                 
-                outputs = model(inputs)
-                bce_loss = criterion(outputs, targets)
-
-                # Row constraint loss - each row should have exactly 3 suns
-                row_sum = outputs.sum(dim=2)  # Sum across each row
-                row_constraint_loss = ((row_sum - 3) ** 2).mean()  # Should be 3 suns per row
+                # Zero the parameter gradients
+                optimizer.zero_grad()
                 
-                # Column constraint loss - each column should have exactly 3 suns
-                col_sum = outputs.sum(dim=1)  # Sum across each column
-                col_constraint_loss = ((col_sum - 3) ** 2).mean()  # Should be 3 suns per column
+                # Forward pass
+                outputs = model(inputs)
+
+                # Standard BCE loss
+                bce_loss = criterion(outputs, targets)
+                
 
                 # Board loss - no consecutive 3 suns or moons
                 board_constraint_loss = board_criterion(outputs)
                 
                 # Combined loss
-                loss = alpha * bce_loss + beta * row_constraint_loss + gamma * col_constraint_loss + eta * board_constraint_loss
+                loss = alpha * bce_loss + beta * board_constraint_loss
                 
-                val_loss += loss.item() * inputs.size(0)
+                # Backward pass and optimize
+                loss.backward()
+                optimizer.step()
                 
-                # Calculate accuracy
-                predicted = (outputs > 0.5).float()
-                correct_cells += (predicted == targets).sum().item()
-                total_cells += targets.numel()
-        
-        val_epoch_loss = val_loss / len(val_loader.dataset)
-        val_accuracy = correct_cells / total_cells
-        
-        history['val_loss'].append(val_epoch_loss)
-        history['val_accuracy'].append(val_accuracy)
+                running_loss += loss.item() * inputs.size(0)
+            
+            epoch_loss = running_loss / len(train_loader.dataset)
+            history['train_loss'].append(epoch_loss)
+            
+            # Validation phase
+            model.eval()
+            val_loss = 0.0
+            correct_cells = 0
+            total_cells = 0
+            
+            with torch.no_grad():
+                for inputs, targets in val_loader:
+                    inputs, targets = inputs.to(device), targets.to(device)
+                    
+                    outputs = model(inputs)
+                    bce_loss = criterion(outputs, targets)
 
-        if val_epoch_loss < best_val_loss:
-            best_val_loss = val_epoch_loss
-            best_model = deepcopy(model)
-        
-        print(f'Epoch {epoch+1}/{num_epochs} - Train Loss: {epoch_loss:.4f} - '
-              f'Val Loss: {val_epoch_loss:.4f} - Val Accuracy: {val_accuracy:.4f}')
+                    # Board loss - no consecutive 3 suns or moons
+                    board_constraint_loss = board_criterion(outputs)
+                    
+                    # Combined loss
+                    loss = alpha * bce_loss + beta * board_constraint_loss
+                    
+                    val_loss += loss.item() * inputs.size(0)
+                    predicted = (outputs > 0.5).float()
+                    correct_cells += (predicted == targets).sum().item()
+                    total_cells += targets.numel()
 
+                    # Calculate board accuracy
+                    correct_boards = 0
+                    batch_size = targets.size(0)
+                    for i in range(batch_size):
+                        tango_board_predicted = TangoBoard()
+                        tango_board_predicted.fulfill(board=predicted[i].cpu())
+                        if tango_board_predicted.check():
+                            correct_boards += 1
+
+            board_accuracy = correct_boards / batch_size
+            
+            val_epoch_loss = val_loss / len(val_loader.dataset)
+            val_accuracy = correct_cells / total_cells
+            
+            history['val_loss'].append(val_epoch_loss)
+            history['val_accuracy'].append(val_accuracy)
+
+            if val_epoch_loss < best_val_loss:
+                best_val_loss = val_epoch_loss
+                best_model = deepcopy(model)
+                best_model.to('cpu')
+                print(f"Selected best model from epoch {epoch+1}")
+            
+            print(f'Epoch {epoch+1}/{num_epochs} - Train Loss: {epoch_loss:.4f} - '
+                f'Val Loss: {val_epoch_loss:.4f} - Val Board Accuracy: {board_accuracy:.4f}')
+    except KeyboardInterrupt:
+        pass
+
+    best_model.to(device)
     return history, best_model
 
 
@@ -216,7 +224,7 @@ def test_model(model, test_loader, device='cuda'):
     return cell_accuracy, board_accuracy
 
 
-def visualize_predictions(model, test_loader,  num_examples=5, device='cuda'):
+def visualize_predictions(model, test_loader, num_examples=5, device='cuda', initial_values=None):
     """Visualize some predictions"""
     model.eval()
     
@@ -228,6 +236,8 @@ def visualize_predictions(model, test_loader,  num_examples=5, device='cuda'):
         predicted = (outputs > 0.5).float()
     
     fig, axes = plt.subplots(num_examples, 3, figsize=(12, 15))
+    if initial_values:
+        fig.suptitle(f'initial_values={initial_values}\n')
     
     for i in range(min(num_examples, inputs.size(0))):
         # Plot input
@@ -272,7 +282,7 @@ def visualize_predictions(model, test_loader,  num_examples=5, device='cuda'):
         axes[i, 2].axis('off')
     
     plt.tight_layout()
-    plt.savefig('tango_predictions.png')
+    plt.savefig('images/tango_' + model.name + '_predictions.png')
     plt.show()
 
 
@@ -294,31 +304,26 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
     initial_values=random_cells
     train_dataset = TangoDataset(train_data, num_initial_values=initial_values)
     val_dataset = TangoDataset(val_data, num_initial_values=initial_values)
-    test_dataset = TangoDataset(test_data, num_initial_values=initial_values)
+    # test_dataset = TangoDataset(test_data, num_initial_values=initial_values)
     
     # Create data loaders
-    batch_size = 100
+    batch_size = 200
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size)
     
     # Initialize model, loss, and optimizer
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    if model_type == 'cnn':
-        model = TangoCNN()
-    elif model_type == 'ensemble':
-        model = EnsembleCNN(n=5)
-    else:
-        model = TangoTransformer()
+    model = model_dict[model_type]()
     model_name = 'models/tango_' + model_type + '_model.pth'
     
     if resume and os.path.isfile(model_name):
         print('Loading from', model_name)
         model.load_state_dict(torch.load(model_name))
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=10**-3)
+    optimizer = optim.Adam(model.parameters(), lr=10**-4)
     
     # Train model
     history, best_model = train_model(
@@ -348,7 +353,7 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig('tango_training_history.png')
+    plt.savefig('images/tango_' + model_type + '_training_history.png')
     # plt.show()
     
     # # Test model
@@ -360,18 +365,14 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
     # Save model
     os.makedirs('models', exist_ok=True)
     torch.save(best_model.state_dict(), model_name)
-    print("Model saved to models/tango_cnn_model.pth")
+    print(f"Model saved to {model_name}")
 
 
 def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
     # Initialize model, loss, and optimizer
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if model_type == 'cnn':
-        model = TangoCNN()
-    elif model_type == 'ensemble':
-        model = EnsembleCNN(n=5)
-    else:
-        model = TangoTransformer()
+    model = model_dict[model_type]()
+    model.name = model_type
     state_dict_pth = 'models/tango_' + model_type + '_model.pth'
     model.load_state_dict(torch.load(state_dict_pth))
     model.to(device)
@@ -379,7 +380,7 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
 
     # Create data loaders
     sol_filenames = [os.path.join(sol_folder, f) for f in os.listdir(sol_folder)]
-    batch_size = 100
+    batch_size = 7000
     # Split data into train, validation, test sets
     _, test_data = train_test_split(sol_filenames, test_size=0.25, random_state=42)
 
@@ -398,10 +399,14 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
         
         # # Visualize predictions
         if board_accuracy >= 0.5:
-            visualize_predictions(model, test_loader, num_examples=5, device=device)
+            visualize_predictions(model, test_loader, num_examples=5, device=device, initial_values=initial_values)
             break
 
 
 if __name__ == "__main__":
-    main(model_type='cnn', random_cells=12, epochs=10, resume=True)
-    main_test(model_type='cnn', random_cells=12)
+    # main(model_type='cnn', random_cells=12, epochs=10, resume=True)
+    # main_test(model_type='cnn', random_cells=12)
+
+    main(model_type='chatgpt', random_cells=12, epochs=10, resume=True)
+    main_test(model_type='chatgpt', random_cells=12)
+

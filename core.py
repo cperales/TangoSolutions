@@ -263,7 +263,7 @@ class TangoBoard:
 
     def fulfill(self, board=None, eq_rules=list(), opp_rules=list()):
         if not board is None:
-            self.board = np.array(board, dtype=np.uint8)
+            self.board = np.array(board, dtype=np.int8)
             for row in range(6):
                 for col in range(6):
                     if self.board[row, col] != -1:

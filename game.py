@@ -118,6 +118,7 @@ def reduce_and_reconstruct(tango_board, n_cells):
     # print(f"Removing {n_cells} cells...")
     new_board, _ = remove_cells(deepcopy(tango_board),
                                             n_cells)
+    reduced_board = deepcopy(new_board)
     _, sols, _ = recursive_tango(position=36,
                                             tango_board=new_board,
                                             solutions=list())
@@ -126,16 +127,15 @@ def reduce_and_reconstruct(tango_board, n_cells):
         unique_sols = list()
     else:
         unique_sols = get_unique_sols(sols)
-    n_unique = len(unique_sols)
-    return n_unique, unique_sols
+    return unique_sols, reduced_board
 
 
 def find_minimum_board(tango_board):
-    for n_cells in range(1, 37):
-        n_unique, _ = reduce_and_reconstruct(tango_board, n_cells)
-        if n_unique != 1:
-            return n_cells - 1
-    return n_cells
+    for n_cells in range(1, 37):    
+        unique_sols, reduced_board = reduce_and_reconstruct(tango_board, n_cells)
+        if len(unique_sols) != 1:
+            return n_cells - 1, reduced_board
+    return n_cells, reduced_board
 
 
 def save_solution(board, filepath):
@@ -166,14 +166,14 @@ def load_sols(folder):
 
 if __name__ == '__main__':
     # # # Fixed solution
-    # fill_board = np.array([[ 0,  0, -1,  1, -1, -1],
-    #                        [-1, -1, -1, -1, -1, -1],
-    #                        [ 0, -1, -1, -1,  0, -1],
-    #                        [-1,  1, -1, -1, -1,  1],
-    #                        [-1, -1, -1, -1, -1, -1],
-    #                        [-1, -1,  1, -1,  0, -1]])
-    # eq_rules = [[(0, 0), (0, 1)]]
-    # opp_rules = [[(0, 5), (1, 5)], [(1, 3), (1, 4)], [(4, 2), (5, 2)]]
+    # fill_board = np.array([[-1, -1, -1,  0, -1, -1],
+    #                        [ 1,  1, -1, -1, -1, -1],
+    #                        [-1, -1, -1,  0, -1, -1],
+    #                        [-1, -1, -1, -1,  1, -1],
+    #                        [ 0,  0, -1, -1, -1, -1],
+    #                        [-1, -1,  1, -1, -1,  1]])
+    # eq_rules = []
+    # opp_rules = [[(0, 3), (1, 3)], [(0, 4), (1, 4)], [(3, 3), (4, 3)]]
     # board = TangoBoard()
     # board.fulfill(fill_board, eq_rules, opp_rules)
     # print('Original board:')
@@ -254,9 +254,12 @@ if __name__ == '__main__':
         filepath = os.path.join('solutions',
                                 'sol_' + str(i + 1) + '.pickle')
         board = load_solution(filepath)
-        n_cells = find_minimum_board(board)
-        array_n_cells[i] = n_cells
-        # print(f"Board {i} can be reconstructed with {n_cells} cells.")
+        n_cells, reduced_board = find_minimum_board(board)
+        initial_cells = 36 - n_cells
+        array_n_cells[i] = initial_cells
+        # print(f"Board {i} can be reconstructed with {initial_cells} cells.")
+        # reduced_board.print()
+        # print()
     
     print()
     print('Minimum of n_cells:', array_n_cells.min())
@@ -265,4 +268,4 @@ if __name__ == '__main__':
     print('Median of n_cells:', np.median(array_n_cells))
 
     plt.hist(array_n_cells, bins=10)
-    plt.savefig('hist_removed_cells.png')
+    plt.savefig('hist_initial_cells.png')
