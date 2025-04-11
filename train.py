@@ -323,7 +323,7 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
         print('Loading from', model_name)
         model.load_state_dict(torch.load(model_name))
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=10**-4)
+    optimizer = optim.Adam(model.parameters(), lr=10**-3)
     
     # Train model
     history, best_model = train_model(
@@ -380,7 +380,7 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
 
     # Create data loaders
     sol_filenames = [os.path.join(sol_folder, f) for f in os.listdir(sol_folder)]
-    batch_size = 7000
+    batch_size = 100
     # Split data into train, validation, test sets
     _, test_data = train_test_split(sol_filenames, test_size=0.25, random_state=42)
 
@@ -404,9 +404,8 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
 
 
 if __name__ == "__main__":
-    # main(model_type='cnn', random_cells=12, epochs=10, resume=True)
-    # main_test(model_type='cnn', random_cells=12)
-
-    main(model_type='chatgpt', random_cells=12, epochs=10, resume=True)
-    main_test(model_type='chatgpt', random_cells=12)
+    models = ['cnn', 'ensemble', 'deepseek']
+    for model_type in models:
+        main(model_type=model_type, random_cells=24, epochs=50, resume=False)
+        main_test(model_type=model_type, random_cells=24)
 

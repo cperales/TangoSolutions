@@ -131,7 +131,7 @@ def reduce_and_reconstruct(tango_board, n_cells):
 
 
 def find_minimum_board(tango_board):
-    for n_cells in range(1, 37):    
+    for n_cells in range(1, 37):
         unique_sols, reduced_board = reduce_and_reconstruct(tango_board, n_cells)
         if len(unique_sols) != 1:
             return n_cells - 1, reduced_board
@@ -250,17 +250,21 @@ if __name__ == '__main__':
     n_unique = len(os.listdir('solutions'))  
     n_cells = 10
     array_n_cells = np.empty(n_unique)
-    for i in range(n_unique):
-        filepath = os.path.join('solutions',
-                                'sol_' + str(i + 1) + '.pickle')
-        board = load_solution(filepath)
-        n_cells, reduced_board = find_minimum_board(board)
-        initial_cells = 36 - n_cells
-        array_n_cells[i] = initial_cells
-        # print(f"Board {i} can be reconstructed with {initial_cells} cells.")
-        # reduced_board.print()
-        # print()
-    
+    try:
+        for i in range(n_unique):
+            filepath = os.path.join('solutions',
+                                    'sol_' + str(i + 1) + '.pickle')
+            board = load_solution(filepath)
+            n_cells, reduced_board = find_minimum_board(board)
+            initial_cells = 36 - n_cells
+            array_n_cells[i] = initial_cells
+            if i % 100 == 0:
+                print(f"Board {i} can be reconstructed with {initial_cells} cells.")
+            # reduced_board.print()
+            # print()
+    except KeyboardInterrupt:
+        array_n_cells = array_n_cells[:i]
+
     print()
     print('Minimum of n_cells:', array_n_cells.min())
     print('Maximum of n_cells:', array_n_cells.max())
