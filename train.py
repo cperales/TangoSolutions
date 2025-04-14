@@ -80,17 +80,76 @@ class TangoDataset(Dataset):
         return input_tensor, target
 
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=50, device='cuda'):
+class MinTangoDataset(Dataset):
+    def __init__(self, data_folder, target_folder, index):
+        """
+        Dataset for Tango board training
+        
+        Args:
+            solutions: List of 6x6 numpy arrays with solution boards
+            num_initial_values: Number of values to expose as input
+            transform: Optional transforms to apply
+        """
+        filenames = np.array([os.path.join(data_folder, f) for f in os.listdir(data_folder)])
+        self.data_filenames = filenames[index]
+        self.target_filenames = np.array([f.replace(data_folder, target_folder) for f in filenames])[index]
+        assert len(self.data_filenames) == len(self.target_filenames)
+        self.solutions = dict()
+
+    def __len__(self):
+        return len(self.data_filenames)
+    
+    def get_solution(self, idx):
+        data_file = self.data_filenames[idx]
+        target_file = self.target_filenames[idx]
+        if not idx in self.solutions.keys():
+            self.solutions[idx] = dict()
+            self.solutions[idx]['data'] = load_solution(data_file).board.astype(np.float32)
+            self.solutions[idx]['target'] = load_solution(target_file).board.astype(np.float32)
+        return self.solutions[idx]
+
+    def __getitem__(self, idx):
+        solution_dict = self.get_solution(idx)
+        data = solution_dict['data']
+        
+        # Create input where:
+        # Channel 0: 1 where sun is exposed, 0 elsewhere
+        # Channel 1: 1 where moon is exposed, 0 elsewhere
+        # Channel 2: 1 where position is hidden, 0 elsewhere
+        input_tensor = np.zeros((3, 6, 6), dtype=np.float32)
+                
+        # Channel 0: Exposed suns
+        input_tensor[0][data == 1] = 1.0
+        
+        # Channel 1: Exposed moons
+        input_tensor[1][data == 0] = 1.0
+        
+        # Channel 2: Hidden positions
+        input_tensor[2][data == -1] = 1.0
+        
+        # # Target: 1 for Sun, 0 for Moon
+        # target = solution.astype(np.float32)
+        target = solution_dict['target']
+        
+        # Convert to PyTorch tensors
+        input_tensor = torch.tensor(input_tensor, dtype=torch.float32)
+        target = torch.tensor(target, dtype=torch.float32)
+            
+        return input_tensor, target
+
+
+def train_model(model, train_loader, val_loader, criterion, optimizer_lr=10**-3, num_epochs=50, device='cuda'):
     """Train the CNN model"""
     model.to(device)
     history = {'train_loss': [], 'val_loss': [], 'val_accuracy': []}
+    optimizer = optim.Adam(model.parameters(), lr=optimizer_lr)
 
     # Weights for different components of the loss
-    alpha = 0.1      # Weight for standard BCE loss
-    beta = 0.9       # Weight for board constraint loss
+    alpha = .1      # Weight for standard BCE loss
+    beta = .9       # Weight for board constraint loss
     best_val_loss = torch.inf
     board_criterion = BoardLoss(device=device)
-    
+    stable_counter = 0
     try:
         for epoch in range(num_epochs):
             # Training phase
@@ -108,7 +167,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
                 # Standard BCE loss
                 bce_loss = criterion(outputs, targets)
-                
 
                 # Board loss - no consecutive 3 suns or moons
                 board_constraint_loss = board_criterion(outputs)
@@ -171,9 +229,16 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 best_model = deepcopy(model)
                 best_model.to('cpu')
                 print(f"Selected best model from epoch {epoch+1}")
+            else:
+                stable_counter += 1
+                if stable_counter == 5:
+                    stable_counter = 0
+                    optimizer_lr /= 2
+                    print(f"Optimizer reduced to {optimizer_lr}")
+                    optimizer = optim.Adam(model.parameters(), lr=optimizer_lr)
             
             print(f'Epoch {epoch+1}/{num_epochs} - Train Loss: {epoch_loss:.4f} - '
-                f'Val Loss: {val_epoch_loss:.4f} - Val Board Accuracy: {board_accuracy:.4f}')
+                  f'Val Loss: {val_epoch_loss:.4f} - Val Board Accuracy: {board_accuracy:.4f}')
     except KeyboardInterrupt:
         pass
 
@@ -286,6 +351,89 @@ def visualize_predictions(model, test_loader, num_examples=5, device='cuda', ini
     plt.show()
 
 
+def main_min(data_folder='data', target_folder='target', model_type='cnn', epochs=50, resume=False):
+    data_filenames = [os.path.join(data_folder, f) for f in os.listdir(data_folder)]
+    target_filenames = [os.path.join(target_folder, f) for f in os.listdir(target_folder)]
+    assert len(data_filenames) == len(target_filenames)
+    
+    print(f"{len(data_filenames)} Tango board solutions found")
+    
+    # Convert solutions format if needed (assuming 1 for Sun, 0 for Moon)
+    # If your solutions use different values, adjust accordingly
+    
+    # Split data into train, validation, test sets
+    index = np.arange(len(data_filenames))
+    train_index, _ = train_test_split(index, test_size=0.25, random_state=42)
+
+    train_index, val_index = train_test_split(train_index, test_size=0.25, random_state=42)
+    
+    print(f"Train set: {len(train_index)}, Validation set: {len(val_index)}")
+    
+    # Create datasets
+    train_dataset = MinTangoDataset(data_folder, target_folder, train_index)
+    val_dataset = MinTangoDataset(data_folder, target_folder, val_index)
+    # test_dataset = TangoDataset(test_data, num_initial_values=initial_values)
+    
+    # Create data loaders
+    batch_size = 200
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    
+    # Initialize model, loss, and optimizer
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    
+    model = model_dict[model_type]()
+    model_name = 'models/tango_' + model_type + '_model.pth'
+    
+    if resume and os.path.isfile(model_name):
+        print('Loading from', model_name)
+        model.load_state_dict(torch.load(model_name))
+    criterion = nn.BCELoss()
+    
+    # Train model
+    history, best_model = train_model(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        criterion=criterion,
+        num_epochs=epochs,
+        device=device
+    )
+    
+    # Plot training history
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(history['train_loss'], label='Train Loss')
+    plt.plot(history['val_loss'], label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(history['val_accuracy'], label='Validation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig('images/tango_' + model_type + '_training_history.png')
+    # plt.show()
+    
+    # # Test model
+    # cell_accuracy, board_accuracy = test_model(model, test_loader, device)
+    
+    # # Visualize predictions
+    # visualize_predictions(model, test_loader, num_examples=5, device=device)
+    
+    # Save model
+    os.makedirs('models', exist_ok=True)
+    torch.save(best_model.state_dict(), model_name)
+    print(f"Model saved to {model_name}")
+
+
 def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resume=False):
     sol_filenames = [os.path.join(folder, f) for f in os.listdir(folder)]
     
@@ -307,7 +455,7 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
     # test_dataset = TangoDataset(test_data, num_initial_values=initial_values)
     
     # Create data loaders
-    batch_size = 200
+    batch_size = 300
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -323,7 +471,6 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
         print('Loading from', model_name)
         model.load_state_dict(torch.load(model_name))
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=10**-3)
     
     # Train model
     history, best_model = train_model(
@@ -331,7 +478,6 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
         train_loader=train_loader,
         val_loader=val_loader,
         criterion=criterion,
-        optimizer=optimizer,
         num_epochs=epochs,
         device=device
     )
@@ -404,8 +550,12 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
 
 
 if __name__ == "__main__":
-    models = ['cnn', 'ensemble', 'deepseek']
+    models = ['cnn', 'ensemble', 'deepseek', 'claude', 'chatgpt', 'transformer']
     for model_type in models:
-        main(model_type=model_type, random_cells=24, epochs=50, resume=False)
-        main_test(model_type=model_type, random_cells=24)
+        main_min(data_folder='data', target_folder='target', model_type=model_type, epochs=50, resume=False)
+        main_test(model_type=model_type, random_cells=10)
+    # models = ['cnn', 'ensemble', 'deepseek']
+    # for model_type in models:
+    #     main(model_type=model_type, random_cells=24, epochs=50, resume=False)
+    #     main_test(model_type=model_type, random_cells=24)
 

@@ -21,10 +21,10 @@ class BoardLoss(nn.Module):
         col_sum = binary_output.sum(dim=1)  # Sum across each column
         loss += ((col_sum - 3) ** 2).mean()  # Should be 3 suns per column
         
-        # Constraints: no more than 2 suns or moons together
-        batch_size = binary_output.shape[0]
-        [(self.cons_row(binary_output[n], loss, batch_size), self.cons_col)
-         for n in range(batch_size)]
+        # # Constraints: no more than 2 suns or moons together
+        # batch_size = binary_output.shape[0]
+        # [(self.cons_row(binary_output[n], loss, batch_size), self.cons_col)
+        #  for n in range(batch_size)]
         return loss
 
 

@@ -250,6 +250,8 @@ if __name__ == '__main__':
     n_unique = len(os.listdir('solutions'))  
     n_cells = 10
     array_n_cells = np.empty(n_unique)
+    os.makedirs('data', exist_ok=True)
+    os.makedirs('target', exist_ok=True)
     try:
         for i in range(n_unique):
             filepath = os.path.join('solutions',
@@ -258,7 +260,10 @@ if __name__ == '__main__':
             n_cells, reduced_board = find_minimum_board(board)
             initial_cells = 36 - n_cells
             array_n_cells[i] = initial_cells
-            if i % 100 == 0:
+            # Save solutions
+            save_solution(reduced_board, f'data/{str(i)}.pickle')
+            save_solution(board, f'target/{str(i)}.pickle')
+            if i % 1000 == 0:
                 print(f"Board {i} can be reconstructed with {initial_cells} cells.")
             # reduced_board.print()
             # print()
