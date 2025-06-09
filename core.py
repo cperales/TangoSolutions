@@ -88,7 +88,7 @@ class TangoBoard:
         else:
             self.set_opp_rule(x, y, x_2, y_2)
             if (x, y) in self.fixed_cells:
-                new_fixed_cell = self.apply_equal_rule(x, y)
+                new_fixed_cell = self.apply_opp_rule(x, y)
 
         
         if new_fixed_cell:
