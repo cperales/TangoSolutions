@@ -190,7 +190,7 @@ class TangoBoard:
             if cell in eq_rule:
                 cell_eq = eq_rule.copy()
                 cell_eq.remove(cell)
-                result['equal': cell_eq]
+                result['equal'] = cell_eq
                 break
         return result
 
