@@ -261,7 +261,10 @@ class TangoBoard:
             prev_cell = cell
         return condition
 
-    def fulfill(self, board=None, eq_rules=list(), opp_rules=list()):
+    def fulfill(self, board=None, eq_rules=None, opp_rules=None):
+        eq_rules = eq_rules if eq_rules is not None else []
+        opp_rules = opp_rules if opp_rules is not None else []
+
         if not board is None:
             self.board = np.array(board, dtype=np.int8)
             for row in range(6):
