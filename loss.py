@@ -23,8 +23,10 @@ class BoardLoss(nn.Module):
         
         # Constraints: no more than 2 suns or moons together
         batch_size = binary_output.shape[0]
-        [(self.cons_row(binary_output[n], loss, batch_size), self.cons_col)
-         for n in range(batch_size)]
+        for n in range(batch_size):
+            loss = self.cons_row(binary_output[n], loss, batch_size)
+            loss = self.cons_col(binary_output[n], loss, batch_size)
+
         return loss
 
 
