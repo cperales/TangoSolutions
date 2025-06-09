@@ -6,8 +6,6 @@ This repository is aimed to simulate and compute solutions from Tango game.
 Licensed under the MIT License (see [LICENSE](LICENSE) for details).
 
 
-This repository is aimed to simulate and compute solutions from Tango game.
-
 ## Exporting solutions
 Run the following command to generate a small set of solved boards used by
 the web demo. The results will be saved to `docs/solutions.json`.
