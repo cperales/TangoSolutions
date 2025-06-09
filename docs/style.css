@@ -1,0 +1,25 @@
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+.board {
+  display: inline-block;
+}
+
+.row {
+  display: flex;
+}
+
+.cell {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #444;
+  line-height: 40px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.buttons {
+  margin-top: 10px;
+}
