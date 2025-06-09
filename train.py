@@ -130,7 +130,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             val_loss = 0.0
             correct_cells = 0
             total_cells = 0
-            
+            correct_boards = 0
+            total_boards = 0
+
             with torch.no_grad():
                 for inputs, targets in val_loader:
                     inputs, targets = inputs.to(device), targets.to(device)
@@ -149,16 +151,15 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                     correct_cells += (predicted == targets).sum().item()
                     total_cells += targets.numel()
 
-                    # Calculate board accuracy
-                    correct_boards = 0
                     batch_size = targets.size(0)
                     for i in range(batch_size):
                         tango_board_predicted = TangoBoard()
                         tango_board_predicted.fulfill(board=predicted[i].cpu())
                         if tango_board_predicted.check():
                             correct_boards += 1
+                    total_boards += batch_size
 
-            board_accuracy = correct_boards / batch_size
+            board_accuracy = correct_boards / total_boards if total_boards > 0 else 0
             
             val_epoch_loss = val_loss / len(val_loader.dataset)
             val_accuracy = correct_cells / total_cells
