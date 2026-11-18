@@ -29,6 +29,7 @@ class PositionalEncoding(nn.Module):
         # x: [batch_size, seq_len, embedding_dim]
         return x + self.pe[:, :x.size(1)]
 
+
 class TangoTransformer(nn.Module):
     def __init__(self, d_model=128, nhead=8, num_layers=6, dim_feedforward=512):
         super(TangoTransformer, self).__init__()
@@ -125,22 +126,60 @@ class TangoTransformer(nn.Module):
         return outputs
 
 
-class EnsembleCNN(nn.Module):
+class MOECNN(nn.Module):
     def __init__(self, n=5):
-        super().__init__()  # Call the parent class constructor
-        self.ensemble = nn.ModuleList([TangoCNN() for _ in range(n)])
-        self.alpha = nn.Parameter(torch.ones(n) / n)
-        # self.alpha = torch.ones(n) / n
+        super().__init__()
+        self.n = n
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(3, 6, kernel_size=3),
+            nn.ReLU(),
+            nn.Conv2d(6, 9, kernel_size=3),
+            nn.ReLU())
+        
+        self.linear_layers = nn.Sequential(
+            nn.Linear(36, self.n),
+            nn.Sigmoid()
+        )
     
     def forward(self, x):
-        norm_alpha = F.softmax(self.alpha, dim=0)
         batch_size = x.shape[0]
-        out = torch.zeros((batch_size, 6, 6), device=x.device)
-        i = norm_alpha.argmax()
-        out = self.ensemble[i](x)
-        # for i, base_learner in enumerate(self.ensemble):
-        #     out += self.alpha[i] * base_learner(x)
+        # t = 0.1 * torch.rand_like(x)
+        x_t = self.conv_layers(x)
+        x_t = x_t.view(batch_size, -1)
+        x_t = self.linear_layers(x_t)
+        # x_t += 0.1 * torch.rand_like(x_t)
+        out = F.softmax(x_t, dim=1)
+        # out = x_t
         return out
+
+
+class EnsembleCNN(nn.Module):
+    def __init__(self, n=4):
+        super().__init__()
+        self.n = n
+        self.ensemble = nn.ModuleList([TangoCNN() for _ in range(self.n)])
+        # self.ensemble = [TangoCNN() for _ in range(self.n)]
+        self.moe = MOECNN(n=self.n)
+    
+    def forward(self, x, alpha=None):
+        batch_size = x.shape[0]
+        if alpha is None:
+            alpha = self.moe(x)
+        out = torch.zeros((batch_size, 6, 6), device=x.device)
+        for n in range(self.n):
+            out_model = self.ensemble[n](x)
+            for i in range(batch_size):
+                out[i] += alpha[i, n] * out_model[i]
+        # # decision = alpha.argmax(dim=1)
+        # decision = alpha >= (1 / self.n)
+        # for i in range(batch_size):
+        #     d_i = decision[i]
+        #     for s, a in enumerate(d_i):
+        #         if d_i:
+        #             out[i] += a * self.ensemble[s](x[i]).view(6, 6)
+        #     # out[i] = self.ensemble[n_model](x[i])
+
+        return torch.clamp(out, 0, 1)
 
 
 class TangoCNN(nn.Module):
