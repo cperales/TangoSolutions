@@ -2,9 +2,10 @@ import torch
 from torch import nn
 
 class BoardLoss(nn.Module):
-    def __init__(self, device=torch.device('cpu')):
+    def __init__(self, device=torch.device('cpu'), use_constraints=False):
         super().__init__()
         self.device = device
+        self.use_constraints = use_constraints
         self.one = torch.ones(torch.Size([]), device=self.device)
 
     def forward(self, x):
@@ -21,10 +22,13 @@ class BoardLoss(nn.Module):
         col_sum = binary_output.sum(dim=1)  # Sum across each column
         loss += ((col_sum - 3) ** 2).mean()  # Should be 3 suns per column
         
-        # # Constraints: no more than 2 suns or moons together
-        # batch_size = binary_output.shape[0]
-        # [(self.cons_row(binary_output[n], loss, batch_size), self.cons_col)
-        #  for n in range(batch_size)]
+        # Constraints: no more than 2 suns or moons together
+        # (disabled by default: binary_output has no gradient and the loop is slow)
+        if self.use_constraints:
+            batch_size = binary_output.shape[0]
+            for n in range(batch_size):
+                loss = self.cons_row(binary_output[n], loss, batch_size)
+                loss = self.cons_col(binary_output[n], loss, batch_size)
         return loss
 
 

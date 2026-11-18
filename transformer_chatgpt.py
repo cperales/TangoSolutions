@@ -80,8 +80,8 @@ if __name__ == '__main__':
     # Create an instance of the model.
     model = VisionTransformer()
     
-    # Generate a dummy input image with shape (6, 6, 3)
-    dummy_input = torch.randn(6, 6, 3)
+    # Generate a dummy input image with shape (1, 3, 6, 6)
+    dummy_input = torch.randn(1, 3, 6, 6)
     
     # Get the binary output
     output = model(dummy_input)
