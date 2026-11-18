@@ -253,12 +253,20 @@ def test_model(model, test_loader, device='cuda'):
     total_cells = 0
     correct_boards = 0
     total_boards = 0
+    if isinstance(model, EnsembleCNN):
+        counter = list()
     
     with torch.no_grad():
         for inputs, targets in test_loader:
             inputs, targets = inputs.to(device), targets.to(device)
-            
-            outputs = model(inputs)
+
+            if isinstance(model, EnsembleCNN):
+                alpha = model.moe(inputs)
+                decision = alpha.argmax(dim=1)
+                counter.append(decision.cpu())
+                outputs = model(inputs, alpha)
+            else:
+                outputs = model(inputs)
             predicted = (outputs > 0.5).float()
             
             # Accuracy per cell
@@ -285,6 +293,12 @@ def test_model(model, test_loader, device='cuda'):
     
     print(f'Test Cell Accuracy: {cell_accuracy:.4f}')
     print(f'Test Board Accuracy: {board_accuracy:.4f}')
+
+    if isinstance(model, EnsembleCNN):
+        sum_counter = np.concatenate(counter)
+        plt.hist(sum_counter, bins=np.arange(5) + 1)
+        plt.savefig('images/hist_moe.png')
+        plt.close()
     
     return cell_accuracy, board_accuracy
 
@@ -455,7 +469,7 @@ def main(folder='solutions', model_type='cnn', random_cells=12, epochs=50, resum
     # test_dataset = TangoDataset(test_data, num_initial_values=initial_values)
     
     # Create data loaders
-    batch_size = 300
+    batch_size = 100
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     # test_loader = DataLoader(test_dataset, batch_size=batch_size)
@@ -550,12 +564,11 @@ def main_test(model_type='cnn', sol_folder='solutions', random_cells=None):
 
 
 if __name__ == "__main__":
-    models = ['cnn', 'ensemble', 'deepseek', 'claude', 'chatgpt', 'transformer']
+    # models = ['cnn', 'ensemble', 'deepseek', 'claude', 'chatgpt', 'transformer']
+    models = ['ensemble']
     for model_type in models:
         main_min(data_folder='data', target_folder='target', model_type=model_type, epochs=50, resume=False)
-        main_test(model_type=model_type, random_cells=10)
-    # models = ['cnn', 'ensemble', 'deepseek']
-    # for model_type in models:
-    #     main(model_type=model_type, random_cells=24, epochs=50, resume=False)
-    #     main_test(model_type=model_type, random_cells=24)
+        # main_test(model_type=model_type, random_cells=10)
+        # main(model_type=model_type, random_cells=18, epochs=50, resume=False)
+        main_test(model_type=model_type, random_cells=18)
 
